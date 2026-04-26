@@ -19,6 +19,11 @@ const DOUBAO_MESSAGE_ROOT_SELECTOR =
   'div[data-testid="union_message"], div[data-testid="send_message"], div[data-testid="receive_message"], article, [class*="message-item"]';
 const LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR = ".gm-message-checkbox-container, input.gm-message-checkbox";
 const DEBUG_FLAG_KEY = "__AI_BATCH_DEBUG__";
+const MESSAGE_DEDUPE_VERTICAL_PX = 18;
+const MESSAGE_DEDUPE_HORIZONTAL_PX = 80;
+const PARENT_TEXT_EXPANSION_FACTOR = 2.5;
+const PARENT_TEXT_EXPANSION_ABS = 500;
+const HOST_WIDTH_RATIO_LIMIT = 0.75;
 
 const selectedItems = new Map<string, SelectedTextItem>();
 const checkboxById = new Map<string, HTMLInputElement>();
@@ -186,10 +191,10 @@ function hasNearbyCheckbox(element: HTMLElement): boolean {
   return wrappers.some((wrapper) => {
     const rect = wrapper.getBoundingClientRect();
     const verticallyClose =
-      Math.abs(rect.top - targetRect.top) < 18 ||
+      Math.abs(rect.top - targetRect.top) < MESSAGE_DEDUPE_VERTICAL_PX ||
       (rect.top >= targetRect.top - 4 && rect.top <= targetRect.bottom + 4);
     const horizontallyClose =
-      Math.abs(rect.left - targetRect.left) < 80 ||
+      Math.abs(rect.left - targetRect.left) < MESSAGE_DEDUPE_HORIZONTAL_PX ||
       (rect.left >= targetRect.left - 40 && rect.left <= targetRect.right + 4);
     return verticallyClose && horizontallyClose;
   });
@@ -236,7 +241,10 @@ function dedupeDoubaoCheckboxes(): void {
     const rect = wrapper.getBoundingClientRect();
     const duplicate = keptWrappers.some((kept) => {
       const keptRect = kept.getBoundingClientRect();
-      return Math.abs(rect.top - keptRect.top) < 18 && Math.abs(rect.left - keptRect.left) < 80;
+      return (
+        Math.abs(rect.top - keptRect.top) < MESSAGE_DEDUPE_VERTICAL_PX &&
+        Math.abs(rect.left - keptRect.left) < MESSAGE_DEDUPE_HORIZONTAL_PX
+      );
     });
 
     if (duplicate) {
@@ -321,9 +329,10 @@ function findDoubaoInjectionHost(candidate: HTMLElement): HTMLElement | null {
     if (!parentText.includes(candidateText)) break;
 
     const tooBroad =
-      parentText.length > Math.max(candidateText.length * 2.5, candidateText.length + 500);
+      parentText.length >
+      Math.max(candidateText.length * PARENT_TEXT_EXPANSION_FACTOR, candidateText.length + PARENT_TEXT_EXPANSION_ABS);
     const rect = parent.getBoundingClientRect();
-    const tooWide = rect.width > window.innerWidth * 0.75;
+    const tooWide = rect.width > window.innerWidth * HOST_WIDTH_RATIO_LIMIT;
     if (tooBroad || tooWide) break;
 
     host = parent;
@@ -352,6 +361,33 @@ function preferDoubaoHost(
   return next.text.length > current.text.length ? next : current;
 }
 
+function collectDoubaoHosts(candidates: HTMLElement[]): Array<{ host: HTMLElement; text: string }> {
+  const mergedHosts: Array<{ host: HTMLElement; text: string }> = [];
+
+  for (const candidate of candidates) {
+    const host = findDoubaoInjectionHost(candidate);
+    if (!host) continue;
+    if (host.querySelector(`[${CONTROL_ATTR}="checkbox"]`)) continue;
+    if (trackedElements.has(host)) continue;
+    if (host.closest(`[${CONTROL_ATTR}]`)) continue;
+    if (isBlockedDoubaoArea(host)) continue;
+
+    const text = getNormalizedInnerText(host);
+    if (text.length < MIN_TEXT_LENGTH) continue;
+
+    const duplicateIndex = mergedHosts.findIndex((item) =>
+      areSameDoubaoMessage(item.host, item.text, host, text)
+    );
+    if (duplicateIndex >= 0) {
+      mergedHosts[duplicateIndex] = preferDoubaoHost(mergedHosts[duplicateIndex], { host, text });
+      continue;
+    }
+    mergedHosts.push({ host, text });
+  }
+
+  return mergedHosts;
+}
+
 function scanDoubaoAndInject(): void {
   dedupeDoubaoCheckboxes();
 
@@ -364,28 +400,8 @@ function scanDoubaoAndInject(): void {
   });
 
   if (mergedContentNodes.length > 0) {
-    const mergedHosts: Array<{ host: HTMLElement; text: string }> = [];
+    const mergedHosts = collectDoubaoHosts(mergedContentNodes);
     let injectedFromContent = 0;
-    for (const candidate of mergedContentNodes) {
-      const host = findDoubaoInjectionHost(candidate);
-      if (!host) continue;
-      if (host.querySelector(`[${CONTROL_ATTR}="checkbox"]`)) continue;
-      if (trackedElements.has(host)) continue;
-      if (host.closest(`[${CONTROL_ATTR}]`)) continue;
-      if (isBlockedDoubaoArea(host)) continue;
-
-      const text = getNormalizedInnerText(host);
-      if (text.length < MIN_TEXT_LENGTH) continue;
-
-      const duplicateIndex = mergedHosts.findIndex((item) =>
-        areSameDoubaoMessage(item.host, item.text, host, text)
-      );
-      if (duplicateIndex >= 0) {
-        mergedHosts[duplicateIndex] = preferDoubaoHost(mergedHosts[duplicateIndex], { host, text });
-        continue;
-      }
-      mergedHosts.push({ host, text });
-    }
 
     for (const { host, text } of mergedHosts) {
       createCheckboxForChunk(host, text);
