@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "mkdir -p dist && cp manifest.json dist/manifest.json && vite build --watch --mode development",
-    "build": "vite build && cp manifest.json dist/manifest.json"
+    "dev": "vite build --watch --mode development",
+    "build": "vite build"
   },
   "dependencies": {
     "react": "^18.3.1",
