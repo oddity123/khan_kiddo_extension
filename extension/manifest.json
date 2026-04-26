@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "AI Conversation Batch Analyzer",
+  "description": "Select text chunks on any page and analyze them in batch via side panel.",
+  "version": "1.0.0",
+  "permissions": ["storage", "tabs", "activeTab", "sidePanel"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
