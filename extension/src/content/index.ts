@@ -17,6 +17,8 @@ const DOUBAO_ALT_CONTENT_SELECTOR =
   '[data-testid*="message"][data-testid*="content"], [data-testid*="content"][data-testid*="text"], [class*="message"][class*="content"]';
 const DOUBAO_MESSAGE_ROOT_SELECTOR =
   'div[data-testid="union_message"], div[data-testid="send_message"], div[data-testid="receive_message"], article, [class*="message-item"]';
+const DOUBAO_USER_BUBBLE_SELECTOR = "div.bg-g-send-msg-bubble-bg.whitespace-pre-wrap.wrap-anywhere";
+const DOUBAO_MESSAGE_BLOCK_SELECTOR = "div.my-0.w-full.mx-auto";
 const LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR = ".gm-message-checkbox-container, input.gm-message-checkbox";
 const DEBUG_FLAG_KEY = "__AI_BATCH_DEBUG__";
 const MESSAGE_DEDUPE_VERTICAL_PX = 18;
@@ -388,8 +390,58 @@ function collectDoubaoHosts(candidates: HTMLElement[]): Array<{ host: HTMLElemen
   return mergedHosts;
 }
 
+function collectDoubaoClassBasedHosts(): Array<{ host: HTMLElement; text: string }> {
+  const hosts: Array<{ host: HTMLElement; text: string }> = [];
+  const seen = new Set<HTMLElement>();
+
+  const userBubbles = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_USER_BUBBLE_SELECTOR));
+  for (const bubble of userBubbles) {
+    const text = getNormalizedInnerText(bubble);
+    if (text.length < MIN_TEXT_LENGTH) continue;
+    if (seen.has(bubble)) continue;
+    seen.add(bubble);
+    hosts.push({ host: bubble, text });
+  }
+
+  const messageBlocks = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_MESSAGE_BLOCK_SELECTOR));
+  for (const block of messageBlocks) {
+    if (block.querySelector(DOUBAO_USER_BUBBLE_SELECTOR)) continue;
+    if (isBlockedDoubaoArea(block)) continue;
+
+    const text = getNormalizedInnerText(block);
+    if (text.length < MIN_TEXT_LENGTH) continue;
+    if (seen.has(block)) continue;
+    seen.add(block);
+    hosts.push({ host: block, text });
+  }
+
+  return hosts;
+}
+
 function scanDoubaoAndInject(): void {
   dedupeDoubaoCheckboxes();
+
+  const classBasedHosts = collectDoubaoClassBasedHosts();
+  if (classBasedHosts.length > 0) {
+    let injectedFromClasses = 0;
+    for (const { host, text } of classBasedHosts) {
+      if (trackedElements.has(host)) continue;
+      if (host.querySelector(`[${CONTROL_ATTR}="checkbox"]`)) continue;
+      createCheckboxForChunk(host, text);
+      trackedElements.add(host);
+      injectedFromClasses += 1;
+    }
+
+    debugLog("scanDoubaoAndInject:class-path", {
+      classBasedHosts: classBasedHosts.length,
+      injectedFromClasses,
+      trackedElements: trackedElements.size
+    });
+    if (injectedFromClasses > 0) {
+      emptyDoubaoScanStreak = 0;
+      return;
+    }
+  }
 
   const contentNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_CONTENT_SELECTOR));
   const altContentNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_ALT_CONTENT_SELECTOR));
