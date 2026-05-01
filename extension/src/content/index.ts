@@ -3,6 +3,7 @@ import type { SelectedTextItem } from "../utils/types";
 const SELECTABLE_SELECTOR = "p, div, span";
 const MIN_TEXT_LENGTH = 24;
 const MAX_TEXT_LENGTH = 480;
+const DOUBAO_MIN_TEXT_LENGTH = 2;
 const CONTROL_ATTR = "data-ai-batch-control";
 const ID_ATTR = "data-ai-batch-id";
 const HOST_ATTR = "data-ai-batch-host";
@@ -375,7 +376,7 @@ function collectDoubaoHosts(candidates: HTMLElement[]): Array<{ host: HTMLElemen
     if (isBlockedDoubaoArea(host)) continue;
 
     const text = getNormalizedInnerText(host);
-    if (text.length < MIN_TEXT_LENGTH) continue;
+    if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
 
     const duplicateIndex = mergedHosts.findIndex((item) =>
       areSameDoubaoMessage(item.host, item.text, host, text)
@@ -397,7 +398,7 @@ function collectDoubaoClassBasedHosts(): Array<{ host: HTMLElement; text: string
   const userBubbles = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_USER_BUBBLE_SELECTOR));
   for (const bubble of userBubbles) {
     const text = getNormalizedInnerText(bubble);
-    if (text.length < MIN_TEXT_LENGTH) continue;
+    if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
     if (seen.has(bubble)) continue;
     seen.add(bubble);
     hosts.push({ host: bubble, text });
@@ -409,7 +410,7 @@ function collectDoubaoClassBasedHosts(): Array<{ host: HTMLElement; text: string
     if (isBlockedDoubaoArea(block)) continue;
 
     const text = getNormalizedInnerText(block);
-    if (text.length < MIN_TEXT_LENGTH) continue;
+    if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
     if (seen.has(block)) continue;
     seen.add(block);
     hosts.push({ host: block, text });
@@ -491,7 +492,7 @@ function scanDoubaoAndInject(): void {
     if (host.closest(`[${CONTROL_ATTR}]`)) continue;
 
     const text = normalizeText(host.innerText ?? "");
-    if (text.length < MIN_TEXT_LENGTH) continue;
+    if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
 
     createCheckboxForChunk(host, text);
     trackedElements.add(host);
