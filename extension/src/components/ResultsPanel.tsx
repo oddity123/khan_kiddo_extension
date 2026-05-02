@@ -43,6 +43,27 @@ export function ResultsPanel({ results, loading }: ResultsPanelProps) {
                 <p className="mb-2 text-xs leading-relaxed text-slate-700">{result.original}</p>
                 <div className="text-[11px] font-semibold text-slate-500">建议</div>
                 <p className="text-xs leading-relaxed text-slate-700">{result.suggestion}</p>
+                {result.errors && result.errors.length > 0 ? (
+                  <div className="mt-2 border-t border-slate-200 pt-2">
+                    <div className="mb-1 text-[11px] font-semibold text-slate-500">错误点</div>
+                    <ul className="space-y-1.5">
+                      {result.errors.map((err, errIdx) => (
+                        <li
+                          key={`${result.original}-err-${errIdx}`}
+                          className="rounded-lg bg-white/80 px-2 py-1.5 text-[11px] leading-snug text-slate-700"
+                        >
+                          <span className="font-medium text-slate-800">{err.type}</span>
+                          {err.errorLevel ? (
+                            <span className="ml-1 rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-500">
+                              {err.errorLevel}
+                            </span>
+                          ) : null}
+                          <p className="mt-0.5 text-slate-600">{err.point}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
