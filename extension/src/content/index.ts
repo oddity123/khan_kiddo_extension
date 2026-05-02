@@ -445,11 +445,16 @@ function scanDoubaoAndInject(): void {
   }
 
   const contentNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_CONTENT_SELECTOR));
-  const altContentNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_ALT_CONTENT_SELECTOR));
-  const mergedContentNodes = contentNodes.length > 0 ? contentNodes : altContentNodes;
+  const debugEnabled = isDebugEnabled();
+  const altContentNodes = debugEnabled
+    ? Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_ALT_CONTENT_SELECTOR))
+    : [];
+  const mergedContentNodes =
+    contentNodes.length > 0 ? contentNodes : debugEnabled ? altContentNodes : [];
   debugLog("scanDoubaoAndInject:start", {
     contentNodes: contentNodes.length,
-    altContentNodes: altContentNodes.length
+    altContentNodes: altContentNodes.length,
+    altPathEnabled: debugEnabled
   });
 
   if (mergedContentNodes.length > 0) {
