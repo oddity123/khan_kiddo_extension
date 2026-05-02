@@ -1,3 +1,10 @@
+import {
+  DOUBAO_DOM,
+  DOUBAO_HOSTNAME_REGEX,
+  DOUBAO_MIN_TEXT_LENGTH,
+  DOUBAO_RECEIVE_MESSAGE_ROOT,
+  DOUBAO_SEND_MESSAGE_ROOT
+} from "./doubao-dom-config";
 import type { SelectedTextItem } from "../utils/types";
 
 /**
@@ -15,7 +22,6 @@ const contentScriptUi = {
 const SELECTABLE_SELECTOR = "p, div, span";
 const MIN_TEXT_LENGTH = 24;
 const MAX_TEXT_LENGTH = 480;
-const DOUBAO_MIN_TEXT_LENGTH = 2;
 const CONTROL_ATTR = "data-ai-batch-control";
 const ID_ATTR = "data-ai-batch-id";
 const HOST_ATTR = "data-ai-batch-host";
@@ -24,16 +30,6 @@ const BULK_INLINE_ATTR = "data-ai-batch-bulk-inline";
 const LEGACY_BULK_TOP_BAR_ID = "ai-batch-bulk-top-bar";
 const HIGHLIGHT_CLASS = "ai-batch-highlight";
 const STYLE_ID = "ai-batch-style";
-const DOUBAO_HOST_REGEX = /(^|\.)doubao\.com$/i;
-const DOUBAO_UNION_SELECTOR = 'div[data-testid="union_message"]';
-const DOUBAO_FALLBACK_SELECTOR = 'div[data-testid="send_message"], div[data-testid="receive_message"]';
-const DOUBAO_CONTENT_SELECTOR = 'div[data-testid="message_text_content"]';
-const DOUBAO_ALT_CONTENT_SELECTOR =
-  '[data-testid*="message"][data-testid*="content"], [data-testid*="content"][data-testid*="text"], [class*="message"][class*="content"]';
-const DOUBAO_MESSAGE_ROOT_SELECTOR =
-  'div[data-testid="union_message"], div[data-testid="send_message"], div[data-testid="receive_message"], article, [class*="message-item"]';
-const DOUBAO_USER_BUBBLE_SELECTOR = "div.bg-g-send-msg-bubble-bg.whitespace-pre-wrap.wrap-anywhere";
-const LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR = ".gm-message-checkbox-container, input.gm-message-checkbox";
 const DEBUG_FLAG_KEY = "__AI_BATCH_DEBUG__";
 const MESSAGE_DEDUPE_VERTICAL_PX = 18;
 const MESSAGE_DEDUPE_HORIZONTAL_PX = 80;
@@ -392,13 +388,13 @@ function removeInjectedWrapper(wrapper: HTMLElement): void {
 }
 
 function dedupeDoubaoCheckboxes(): void {
-  const legacyNodes = Array.from(document.querySelectorAll<HTMLElement>(LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR));
+  const legacyNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.legacyTampermonkeyCheckbox));
   legacyNodes.forEach((node) => node.remove());
   if (legacyNodes.length > 0) {
     debugLog("dedupeDoubaoCheckboxes:legacy", { removedCount: legacyNodes.length });
   }
 
-  const messageRoots = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_MESSAGE_ROOT_SELECTOR));
+  const messageRoots = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.messageRootKnown));
   let removedCount = 0;
 
   for (const root of messageRoots) {
@@ -447,10 +443,10 @@ function resetInjectedControls(): void {
   document.getElementById(LEGACY_BULK_TOP_BAR_ID)?.remove();
 
   const wrapperCount = document.querySelectorAll<HTMLElement>(`[${CONTROL_ATTR}="wrapper"]`).length;
-  const legacyCount = document.querySelectorAll<HTMLElement>(LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR).length;
+  const legacyCount = document.querySelectorAll<HTMLElement>(DOUBAO_DOM.legacyTampermonkeyCheckbox).length;
 
   document.querySelectorAll<HTMLElement>(`[${CONTROL_ATTR}="wrapper"]`).forEach((node) => node.remove());
-  document.querySelectorAll<HTMLElement>(LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR).forEach((node) => node.remove());
+  document.querySelectorAll<HTMLElement>(DOUBAO_DOM.legacyTampermonkeyCheckbox).forEach((node) => node.remove());
   document.querySelectorAll<HTMLElement>(`[${HOST_ATTR}="true"]`).forEach((node) => {
     node.removeAttribute(HOST_ATTR);
     node.classList.remove(HIGHLIGHT_CLASS);
@@ -484,18 +480,18 @@ function scanPageAndInject(): void {
 }
 
 function isDoubaoPage(): boolean {
-  return DOUBAO_HOST_REGEX.test(location.hostname);
+  return DOUBAO_HOSTNAME_REGEX.test(location.hostname);
 }
 
 /** 暂不考虑多角色：仅用户侧消息打勾。receive_message 视为 AI；send_message / 用户气泡 class 视为用户。 */
 function isDoubaoUserMessageHost(host: HTMLElement): boolean {
-  if (host.closest('[data-testid="receive_message"]')) {
-    if (host.closest('[data-testid="send_message"]')) return true;
+  if (host.closest(DOUBAO_RECEIVE_MESSAGE_ROOT)) {
+    if (host.closest(DOUBAO_SEND_MESSAGE_ROOT)) return true;
     return false;
   }
-  if (host.closest('[data-testid="send_message"]')) return true;
-  if (host.matches(DOUBAO_USER_BUBBLE_SELECTOR)) return true;
-  if (host.querySelector(DOUBAO_USER_BUBBLE_SELECTOR)) return true;
+  if (host.closest(DOUBAO_SEND_MESSAGE_ROOT)) return true;
+  if (host.matches(DOUBAO_DOM.userBubble)) return true;
+  if (host.querySelector(DOUBAO_DOM.userBubble)) return true;
   return false;
 }
 
@@ -508,7 +504,7 @@ function isBlockedDoubaoArea(element: HTMLElement): boolean {
 }
 
 function findDoubaoInjectionHost(candidate: HTMLElement): HTMLElement | null {
-  const knownRoot = candidate.closest<HTMLElement>(DOUBAO_MESSAGE_ROOT_SELECTOR);
+  const knownRoot = candidate.closest<HTMLElement>(DOUBAO_DOM.messageRootKnown);
   if (knownRoot) return knownRoot;
 
   const candidateText = getNormalizedInnerText(candidate);
@@ -589,7 +585,7 @@ function collectDoubaoClassBasedHosts(): Array<{ host: HTMLElement; text: string
   const hosts: Array<{ host: HTMLElement; text: string }> = [];
   const seen = new Set<HTMLElement>();
 
-  const userBubbles = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_USER_BUBBLE_SELECTOR));
+  const userBubbles = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.userBubble));
   for (const bubble of userBubbles) {
     const text = getNormalizedInnerText(bubble);
     if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
@@ -626,10 +622,10 @@ function scanDoubaoAndInject(): void {
     }
   }
 
-  const contentNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_CONTENT_SELECTOR));
+  const contentNodes = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.messageTextContent));
   const debugEnabled = isDebugEnabled();
   const altContentNodes = debugEnabled
-    ? Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_ALT_CONTENT_SELECTOR))
+    ? Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.altContentRescue))
     : [];
   const mergedContentNodes =
     contentNodes.length > 0 ? contentNodes : debugEnabled ? altContentNodes : [];
@@ -659,12 +655,12 @@ function scanDoubaoAndInject(): void {
     }
   }
 
-  const unionWrappers = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_UNION_SELECTOR));
+  const unionWrappers = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.unionMessage));
   const wrappers =
     unionWrappers.length > 0
       ? unionWrappers
-      : Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_FALLBACK_SELECTOR)).filter(
-          (wrapper) => !wrapper.closest(DOUBAO_UNION_SELECTOR)
+      : Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_DOM.sendOrReceiveMessage)).filter(
+          (wrapper) => !wrapper.closest(DOUBAO_DOM.unionMessage)
         );
 
   let injectedCount = 0;
@@ -673,7 +669,7 @@ function scanDoubaoAndInject(): void {
       continue;
     }
 
-    const contentElement = wrapper.querySelector<HTMLElement>(DOUBAO_CONTENT_SELECTOR);
+    const contentElement = wrapper.querySelector<HTMLElement>(DOUBAO_DOM.messageTextContent);
     const host = contentElement ?? wrapper;
     if (!host || trackedElements.has(host)) continue;
     if (host.closest(`[${CONTROL_ATTR}]`)) continue;
