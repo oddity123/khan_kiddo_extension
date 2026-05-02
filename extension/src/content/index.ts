@@ -1,5 +1,17 @@
 import type { SelectedTextItem } from "../utils/types";
 
+/**
+ * 与 `utils/branding.ts` 中 `contentScript` 保持一致。
+ * 内容脚本不能 import 该文件：Vite 会拆出 `chunks/branding-*.js`，而 Chrome 注入的 content script 非 module，顶层 `import` 会报错。
+ */
+const contentScriptUi = {
+  checkboxTitle: "勾选以加入 KhanKiddo 批量分析",
+  bulkAriaLabel: "KhanKiddo：选择以下全部对话",
+  bulkTitle:
+    "KhanKiddo · 选择以下全部对话：从本条起选中下方全部已注入复选框的用户消息（含本条，会先清空当前已选）。",
+  bulkLabelLong: "选择以下全部对话"
+} as const;
+
 const SELECTABLE_SELECTOR = "p, div, span";
 const MIN_TEXT_LENGTH = 24;
 const MAX_TEXT_LENGTH = 480;
@@ -8,6 +20,8 @@ const CONTROL_ATTR = "data-ai-batch-control";
 const ID_ATTR = "data-ai-batch-id";
 const HOST_ATTR = "data-ai-batch-host";
 const NODE_ATTR = "data-ai-batch-node";
+const BULK_INLINE_ATTR = "data-ai-batch-bulk-inline";
+const LEGACY_BULK_TOP_BAR_ID = "ai-batch-bulk-top-bar";
 const HIGHLIGHT_CLASS = "ai-batch-highlight";
 const STYLE_ID = "ai-batch-style";
 const DOUBAO_HOST_REGEX = /(^|\.)doubao\.com$/i;
@@ -19,7 +33,6 @@ const DOUBAO_ALT_CONTENT_SELECTOR =
 const DOUBAO_MESSAGE_ROOT_SELECTOR =
   'div[data-testid="union_message"], div[data-testid="send_message"], div[data-testid="receive_message"], article, [class*="message-item"]';
 const DOUBAO_USER_BUBBLE_SELECTOR = "div.bg-g-send-msg-bubble-bg.whitespace-pre-wrap.wrap-anywhere";
-const DOUBAO_MESSAGE_BLOCK_SELECTOR = "div.my-0.w-full.mx-auto";
 const LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR = ".gm-message-checkbox-container, input.gm-message-checkbox";
 const DEBUG_FLAG_KEY = "__AI_BATCH_DEBUG__";
 const MESSAGE_DEDUPE_VERTICAL_PX = 18;
@@ -80,6 +93,55 @@ function createStableId(text: string, element: HTMLElement): string {
   return `chunk-${Math.abs(hash)}`;
 }
 
+/** 列表 + 向下：表示从本条起选中下方批量。 */
+function createBulkSelectBelowIconSvg(): SVGSVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+
+  const line = (x1: string, y1: string, x2: string, y2: string) => {
+    const el = document.createElementNS(NS, "line");
+    el.setAttribute("x1", x1);
+    el.setAttribute("y1", y1);
+    el.setAttribute("x2", x2);
+    el.setAttribute("y2", y2);
+    el.setAttribute("stroke", "currentColor");
+    el.setAttribute("stroke-width", "2");
+    el.setAttribute("stroke-linecap", "round");
+    return el;
+  };
+
+  const dot = (cy: string) => {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", "4");
+    c.setAttribute("cy", cy);
+    c.setAttribute("r", "1.35");
+    c.setAttribute("fill", "currentColor");
+    return c;
+  };
+
+  svg.appendChild(dot("6"));
+  svg.appendChild(dot("12"));
+  svg.appendChild(dot("18"));
+  svg.appendChild(line("8", "6", "20", "6"));
+  svg.appendChild(line("8", "12", "20", "12"));
+  svg.appendChild(line("8", "18", "16", "18"));
+
+  const chevron = document.createElementNS(NS, "path");
+  chevron.setAttribute("fill", "none");
+  chevron.setAttribute("stroke", "currentColor");
+  chevron.setAttribute("stroke-width", "2");
+  chevron.setAttribute("stroke-linecap", "round");
+  chevron.setAttribute("stroke-linejoin", "round");
+  chevron.setAttribute("d", "M17 15l2 2 2-2");
+  svg.appendChild(chevron);
+
+  return svg;
+}
+
 function injectStyles(): void {
   if (document.getElementById(STYLE_ID)) return;
 
@@ -99,10 +161,46 @@ function injectStyles(): void {
       margin-right: 6px;
       z-index: 2147483647;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-start;
+      gap: 4px;
       width: auto;
       flex-shrink: 0;
+    }
+    button[${BULK_INLINE_ATTR}] {
+      margin: 0;
+      padding: 2px 4px;
+      border: 1px solid rgba(203, 213, 225, 0.95);
+      border-radius: 5px;
+      background: rgba(248, 250, 252, 0.98);
+      font-size: 10px;
+      line-height: 1.25;
+      color: #334155;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button[${BULK_INLINE_ATTR}] .ai-batch-bulk-short {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button[${BULK_INLINE_ATTR}] .ai-batch-bulk-short svg {
+      display: block;
+    }
+    button[${BULK_INLINE_ATTR}] .ai-batch-bulk-long {
+      display: none;
+    }
+    button[${BULK_INLINE_ATTR}]:hover .ai-batch-bulk-short {
+      display: none;
+    }
+    button[${BULK_INLINE_ATTR}]:hover .ai-batch-bulk-long {
+      display: inline;
+    }
+    button[${BULK_INLINE_ATTR}]:hover {
+      border-color: #3b82f6;
+      color: #1e40af;
+      background: #eff6ff;
     }
     [${CONTROL_ATTR}="checkbox"] {
       margin: 0;
@@ -149,13 +247,71 @@ function sendSelectionUpdate(): void {
   });
 }
 
-function createCheckboxForChunk(
-  element: HTMLElement,
-  text: string
-): void {
+function getSelectionTextForHost(host: HTMLElement): string {
+  return isDoubaoPage()
+    ? normalizeText(host.innerText ?? host.textContent ?? "")
+    : normalizeText(host.innerText ?? "");
+}
+
+function applyCheckboxSelection(checkbox: HTMLInputElement, checked: boolean): void {
+  const id = checkbox.getAttribute(ID_ATTR);
+  if (!id) return;
+  const host = checkbox.closest<HTMLElement>(`[${HOST_ATTR}="true"]`);
+  if (!host) return;
+  const text = getSelectionTextForHost(host);
+  if (checked) {
+    selectedItems.set(id, { id, text, sourceTag: host.tagName.toLowerCase() });
+    host.classList.add(HIGHLIGHT_CLASS);
+  } else {
+    selectedItems.delete(id);
+    host.classList.remove(HIGHLIGHT_CLASS);
+  }
+}
+
+function clearAllSelectionsWithoutNotify(): void {
+  for (const checkbox of checkboxById.values()) {
+    checkbox.checked = false;
+    applyCheckboxSelection(checkbox, false);
+  }
+}
+
+/** 上旧下新：按视口纵向位置自上而下排序（含锚点及更「新」一侧）。 */
+function getSelectableHostsInChatOrder(): HTMLElement[] {
+  const hosts = Array.from(document.querySelectorAll<HTMLElement>(`[${HOST_ATTR}="true"]`)).filter((el) =>
+    Boolean(el.querySelector<HTMLInputElement>(`[${CONTROL_ATTR}="checkbox"]`))
+  );
+  return hosts.sort((a, b) => {
+    const ra = a.getBoundingClientRect();
+    const rb = b.getBoundingClientRect();
+    const dy = ra.top - rb.top;
+    if (Math.abs(dy) < 0.5) return ra.left - rb.left;
+    return dy;
+  });
+}
+
+function selectAllFromHereInDoubao(anchorHost: HTMLElement): void {
+  clearAllSelectionsWithoutNotify();
+  const hosts = getSelectableHostsInChatOrder();
+  const anchorIdx = hosts.indexOf(anchorHost);
+  if (anchorIdx < 0) {
+    debugLog("selectAllFromHere:anchor-not-found", { tag: anchorHost.tagName });
+    sendSelectionUpdate();
+    return;
+  }
+  for (const host of hosts.slice(anchorIdx)) {
+    const checkbox = host.querySelector<HTMLInputElement>(`[${CONTROL_ATTR}="checkbox"]`);
+    if (!checkbox) continue;
+    checkbox.checked = true;
+    applyCheckboxSelection(checkbox, true);
+  }
+  sendSelectionUpdate();
+}
+
+function createCheckboxForChunk(element: HTMLElement, text: string): boolean {
   const id = createStableId(text, element);
-  if (checkboxById.has(id)) return;
-  if (hasNearbyCheckbox(element)) return;
+  if (checkboxById.has(id)) return false;
+  if (hasNearbyCheckbox(element)) return false;
+  if (isDoubaoPage() && !isDoubaoUserMessageHost(element)) return false;
 
   const wrapper = document.createElement("span");
   wrapper.setAttribute(CONTROL_ATTR, "wrapper");
@@ -165,16 +321,10 @@ function createCheckboxForChunk(
   checkbox.type = "checkbox";
   checkbox.setAttribute(CONTROL_ATTR, "checkbox");
   checkbox.setAttribute(ID_ATTR, id);
-  checkbox.title = "勾选以加入批量分析";
+  checkbox.title = contentScriptUi.checkboxTitle;
 
   checkbox.addEventListener("change", () => {
-    if (checkbox.checked) {
-      selectedItems.set(id, { id, text, sourceTag: element.tagName.toLowerCase() });
-      element.classList.add(HIGHLIGHT_CLASS);
-    } else {
-      selectedItems.delete(id);
-      element.classList.remove(HIGHLIGHT_CLASS);
-    }
+    applyCheckboxSelection(checkbox, checkbox.checked);
     sendSelectionUpdate();
   });
 
@@ -186,10 +336,34 @@ function createCheckboxForChunk(
   });
 
   wrapper.appendChild(checkbox);
+  if (isDoubaoPage()) {
+    const bulkBtn = document.createElement("button");
+    bulkBtn.type = "button";
+    bulkBtn.setAttribute(BULK_INLINE_ATTR, "1");
+    bulkBtn.setAttribute("aria-label", contentScriptUi.bulkAriaLabel);
+    bulkBtn.title = contentScriptUi.bulkTitle;
+    const spanShort = document.createElement("span");
+    spanShort.className = "ai-batch-bulk-short";
+    spanShort.appendChild(createBulkSelectBelowIconSvg());
+    const spanLong = document.createElement("span");
+    spanLong.className = "ai-batch-bulk-long";
+    spanLong.textContent = contentScriptUi.bulkLabelLong;
+    bulkBtn.appendChild(spanShort);
+    bulkBtn.appendChild(spanLong);
+    bulkBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const host = bulkBtn.closest<HTMLElement>(`[${HOST_ATTR}="true"]`);
+      if (!host) return;
+      selectAllFromHereInDoubao(host);
+    });
+    wrapper.appendChild(bulkBtn);
+  }
   element.setAttribute(HOST_ATTR, "true");
   element.appendChild(wrapper);
 
   checkboxById.set(id, checkbox);
+  return true;
 }
 
 function hasNearbyCheckbox(element: HTMLElement): boolean {
@@ -270,6 +444,8 @@ function dedupeDoubaoCheckboxes(): void {
 }
 
 function resetInjectedControls(): void {
+  document.getElementById(LEGACY_BULK_TOP_BAR_ID)?.remove();
+
   const wrapperCount = document.querySelectorAll<HTMLElement>(`[${CONTROL_ATTR}="wrapper"]`).length;
   const legacyCount = document.querySelectorAll<HTMLElement>(LEGACY_TAMPERMONKEY_CHECKBOX_SELECTOR).length;
 
@@ -301,8 +477,9 @@ function scanPageAndInject(): void {
     const chunks = splitToChunks(node.innerText ?? "");
     if (chunks.length === 0) continue;
 
-    createCheckboxForChunk(node, chunks[0]);
-    trackedElements.add(node);
+    if (createCheckboxForChunk(node, chunks[0])) {
+      trackedElements.add(node);
+    }
   }
 }
 
@@ -310,8 +487,20 @@ function isDoubaoPage(): boolean {
   return DOUBAO_HOST_REGEX.test(location.hostname);
 }
 
+/** 暂不考虑多角色：仅用户侧消息打勾。receive_message 视为 AI；send_message / 用户气泡 class 视为用户。 */
+function isDoubaoUserMessageHost(host: HTMLElement): boolean {
+  if (host.closest('[data-testid="receive_message"]')) {
+    if (host.closest('[data-testid="send_message"]')) return true;
+    return false;
+  }
+  if (host.closest('[data-testid="send_message"]')) return true;
+  if (host.matches(DOUBAO_USER_BUBBLE_SELECTOR)) return true;
+  if (host.querySelector(DOUBAO_USER_BUBBLE_SELECTOR)) return true;
+  return false;
+}
+
 function getNormalizedInnerText(element: HTMLElement): string {
-  return normalizeText(element.innerText ?? element.textContent ?? "");
+  return getSelectionTextForHost(element);
 }
 
 function isBlockedDoubaoArea(element: HTMLElement): boolean {
@@ -409,18 +598,6 @@ function collectDoubaoClassBasedHosts(): Array<{ host: HTMLElement; text: string
     hosts.push({ host: bubble, text });
   }
 
-  const messageBlocks = Array.from(document.querySelectorAll<HTMLElement>(DOUBAO_MESSAGE_BLOCK_SELECTOR));
-  for (const block of messageBlocks) {
-    if (block.querySelector(DOUBAO_USER_BUBBLE_SELECTOR)) continue;
-    if (isBlockedDoubaoArea(block)) continue;
-
-    const text = getNormalizedInnerText(block);
-    if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
-    if (seen.has(block)) continue;
-    seen.add(block);
-    hosts.push({ host: block, text });
-  }
-
   return hosts;
 }
 
@@ -433,7 +610,7 @@ function scanDoubaoAndInject(): void {
     for (const { host, text } of classBasedHosts) {
       if (trackedElements.has(host)) continue;
       if (host.querySelector(`[${CONTROL_ATTR}="checkbox"]`)) continue;
-      createCheckboxForChunk(host, text);
+      if (!createCheckboxForChunk(host, text)) continue;
       trackedElements.add(host);
       injectedFromClasses += 1;
     }
@@ -467,7 +644,7 @@ function scanDoubaoAndInject(): void {
     let injectedFromContent = 0;
 
     for (const { host, text } of mergedHosts) {
-      createCheckboxForChunk(host, text);
+      if (!createCheckboxForChunk(host, text)) continue;
       trackedElements.add(host);
       injectedFromContent += 1;
     }
@@ -504,7 +681,7 @@ function scanDoubaoAndInject(): void {
     const text = normalizeText(host.innerText ?? "");
     if (text.length < DOUBAO_MIN_TEXT_LENGTH) continue;
 
-    createCheckboxForChunk(host, text);
+    if (!createCheckboxForChunk(host, text)) continue;
     trackedElements.add(host);
     injectedCount += 1;
   }
@@ -563,6 +740,13 @@ chrome.runtime.onMessage.addListener((message: { type: string; payload?: unknown
     return true;
   }
 
+  if (message.type === "CLEAR_ALL_SELECTIONS") {
+    clearAllSelectionsWithoutNotify();
+    sendSelectionUpdate();
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (message.type === "REMOVE_SELECTION") {
     const id = (message.payload as { id?: string } | undefined)?.id;
     if (!id) return false;
@@ -571,7 +755,9 @@ chrome.runtime.onMessage.addListener((message: { type: string; payload?: unknown
     const checkbox = checkboxById.get(id);
     if (checkbox) {
       checkbox.checked = false;
-      const host = checkbox.closest("p, div, span");
+      const host =
+        checkbox.closest<HTMLElement>(`[${HOST_ATTR}="true"]`) ??
+        checkbox.closest<HTMLElement>("p, div, span");
       host?.classList.remove(HIGHLIGHT_CLASS);
     }
     sendSelectionUpdate();

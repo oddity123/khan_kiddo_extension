@@ -7,6 +7,7 @@ interface AnalyzerState {
   loading: boolean;
   setSelectedItems: (items: SelectedTextItem[]) => void;
   removeSelectedItem: (id: string) => void;
+  clearSelectedItems: () => void;
   setResults: (results: AnalysisResult[]) => void;
   setLoading: (loading: boolean) => void;
   clearResults: () => void;
@@ -21,6 +22,7 @@ export const useAnalyzerStore = create<AnalyzerState>((set) => ({
     set((state) => ({
       selectedItems: state.selectedItems.filter((item) => item.id !== id)
     })),
+  clearSelectedItems: () => set({ selectedItems: [] }),
   setResults: (results) => set({ results }),
   setLoading: (loading) => set({ loading }),
   clearResults: () => set({ results: [] })

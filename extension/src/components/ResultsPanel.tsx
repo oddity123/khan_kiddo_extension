@@ -1,3 +1,4 @@
+import { resultsPanel } from "../utils/branding";
 import type { AnalysisResult } from "../utils/types";
 
 interface ResultsPanelProps {
@@ -12,7 +13,7 @@ function analysisTypeLabel(type: AnalysisResult["type"]): string {
 export function ResultsPanel({ results, loading }: ResultsPanelProps) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-soft">
-      <h2 className="mb-3 shrink-0 text-sm font-semibold text-slate-800">分析结果</h2>
+      <h2 className="mb-3 shrink-0 text-sm font-semibold text-slate-800">{resultsPanel.sectionTitle}</h2>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-0.5">
         {loading ? (
@@ -23,7 +24,7 @@ export function ResultsPanel({ results, loading }: ResultsPanelProps) {
           </div>
         ) : results.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-            分析结果将显示在这里。
+            {resultsPanel.emptyHint}
           </p>
         ) : (
           <ul className="space-y-2">

@@ -1,3 +1,4 @@
+import { backgroundStrings } from "../utils/branding";
 import type { AnalysisResult } from "../utils/types";
 
 function createMockSuggestion(input: string, index: number): AnalysisResult {
@@ -29,7 +30,9 @@ chrome.runtime.onMessage.addListener((message: { type: string; payload?: unknown
   mockAnalyzeBatch(texts)
     .then((results) => sendResponse({ results }))
     .catch((error: unknown) =>
-      sendResponse({ error: error instanceof Error ? error.message : "分析过程出现未知错误" })
+      sendResponse({
+        error: error instanceof Error ? error.message : backgroundStrings.analyzeUnknownError
+      })
     );
 
   return true;
