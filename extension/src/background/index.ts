@@ -4,8 +4,8 @@ function createMockSuggestion(input: string, index: number): AnalysisResult {
   const type = index % 2 === 0 ? "grammar" : "expression";
   const suggestion =
     type === "grammar"
-      ? `Consider tightening grammar: "${input.slice(0, 64)}..." can be simplified for readability.`
-      : `Try a more vivid phrasing for: "${input.slice(0, 64)}..." to improve tone.`;
+      ? `语法可再收紧：「${input.slice(0, 64)}${input.length > 64 ? "…" : ""}」可改写得更易读。`
+      : `表达可更生动：围绕「${input.slice(0, 64)}${input.length > 64 ? "…" : ""}」换种说法，语气会更自然。`;
 
   return {
     original: input,
@@ -29,7 +29,7 @@ chrome.runtime.onMessage.addListener((message: { type: string; payload?: unknown
   mockAnalyzeBatch(texts)
     .then((results) => sendResponse({ results }))
     .catch((error: unknown) =>
-      sendResponse({ error: error instanceof Error ? error.message : "Unknown analysis error" })
+      sendResponse({ error: error instanceof Error ? error.message : "分析过程出现未知错误" })
     );
 
   return true;

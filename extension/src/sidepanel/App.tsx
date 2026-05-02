@@ -73,8 +73,8 @@ export default function App() {
     } else {
       setResults([
         {
-          original: "Batch analysis failed",
-          suggestion: response?.error ?? "Unexpected error from background service worker.",
+          original: "批量分析失败",
+          suggestion: response?.error ?? "后台服务出现未知错误。",
           type: "expression"
         }
       ]);
@@ -84,24 +84,25 @@ export default function App() {
   }, [clearResults, loading, selectedItems, setLoading, setResults]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-panel-50 to-white p-4 text-slate-900">
-      <header className="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">AI Conversation Batch Analyzer</p>
-        <h1 className="mt-1 text-lg font-semibold text-slate-800">Select text blocks and analyze in batch</h1>
+    <main className="flex h-screen max-h-screen flex-col overflow-hidden bg-gradient-to-b from-panel-50 to-white p-4 text-slate-900">
+      <header className="shrink-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft">
+        <p className="text-[11px] tracking-wide text-slate-400">对话批量分析</p>
+        <h1 className="mt-1 text-lg font-semibold text-slate-800">勾选多条消息后一键分析</h1>
         <p className="mt-2 text-xs text-slate-500">
-          Works with ChatGPT pages and generic websites. Tick text checkboxes in page content first.
+          请先在页面里勾选消息旁的复选框，再点击下方按钮；已选列表过长时可在区域内滚动查看。
         </p>
       </header>
 
-      <div className="space-y-4">
+      <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
         <SelectedItemsPanel items={selectedItems} onRemove={handleRemoveSelection} />
 
         <button
+          type="button"
           onClick={handleAnalyze}
           disabled={selectedItems.length === 0 || loading}
-          className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="shrink-0 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          {loading ? "Analyzing..." : "Analyze Selected"}
+          {loading ? "分析中…" : "分析已选项"}
         </button>
 
         <ResultsPanel results={results} loading={loading} />

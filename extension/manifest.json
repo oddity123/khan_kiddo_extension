@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "AI Conversation Batch Analyzer",
-  "description": "Select text chunks on any page and analyze them in batch via side panel.",
+  "name": "对话批量分析",
+  "description": "在网页中勾选多条对话文本，于侧边栏批量查看分析结果。",
   "version": "1.0.0",
   "permissions": ["storage", "tabs", "activeTab", "sidePanel"],
   "host_permissions": ["https://www.doubao.com/*", "https://doubao.com/*"],

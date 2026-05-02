@@ -94,10 +94,15 @@ function injectStyles(): void {
     [${CONTROL_ATTR}="wrapper"] {
       position: absolute;
       top: 4px;
-      left: 4px;
+      left: auto;
+      right: 100%;
+      margin-right: 6px;
       z-index: 2147483647;
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       width: auto;
+      flex-shrink: 0;
     }
     [${CONTROL_ATTR}="checkbox"] {
       margin: 0;
@@ -160,7 +165,7 @@ function createCheckboxForChunk(
   checkbox.type = "checkbox";
   checkbox.setAttribute(CONTROL_ATTR, "checkbox");
   checkbox.setAttribute(ID_ATTR, id);
-  checkbox.title = "Select for AI batch analysis";
+  checkbox.title = "勾选以加入批量分析";
 
   checkbox.addEventListener("change", () => {
     if (checkbox.checked) {
