@@ -92,17 +92,19 @@ export default function App() {
     setLoading(false);
   }, [clearResults, loading, selectedItems, setLoading, setResults]);
 
+  const hasAnalysisResults = results.length > 0 && !loading;
+
   return (
     <main className="flex h-screen max-h-screen flex-col overflow-hidden bg-gradient-to-b from-panel-50 to-white p-4 text-slate-900">
-      <header className="shrink-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft">
-        <p className="text-[11px] tracking-wide text-slate-400">{sidePanel.headerEyebrow}</p>
-        <h1 className="mt-1 text-lg font-semibold text-slate-800">{sidePanel.headerTitle}</h1>
-        <p className="mt-2 text-xs text-slate-500">{sidePanel.headerDescription}</p>
+      <header className="shrink-0 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-soft">
+        <h1 className="text-base font-semibold leading-snug text-slate-800">{sidePanel.headerTitle}</h1>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{sidePanel.headerTagline}</p>
       </header>
 
-      <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
         <SelectedItemsPanel
           items={selectedItems}
+          compact={hasAnalysisResults}
           onRemove={handleRemoveSelection}
           onClearAll={handleClearAllSelections}
         />
@@ -111,12 +113,14 @@ export default function App() {
           type="button"
           onClick={handleAnalyze}
           disabled={selectedItems.length === 0 || loading}
-          className="shrink-0 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="shrink-0 w-full rounded-xl border border-slate-200 bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-soft transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-300 disabled:text-white"
         >
           {loading ? sidePanel.analyzing : sidePanel.analyzeButton}
         </button>
 
-        <ResultsPanel results={results} loading={loading} />
+        <div className="flex min-h-0 flex-1 flex-col">
+          <ResultsPanel results={results} loading={loading} />
+        </div>
       </div>
     </main>
   );

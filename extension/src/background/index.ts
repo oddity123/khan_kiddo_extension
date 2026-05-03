@@ -1,7 +1,11 @@
 import { backgroundStrings } from "../utils/branding";
-import { consumePluginAnalyzeStream, validateUserMessagesForPlugin } from "../utils/pluginConversationAnalysis";
+import {
+  consumePluginAnalyzeStream,
+  PluginSessionRequiredError,
+  validateUserMessagesForPlugin
+} from "../utils/pluginConversationAnalysis";
 import { mapPluginAnalysisResponseToPanelResults } from "../utils/mapPluginAnalysisToPanel";
-import { resolveKhanApiOrigin } from "../utils/resolveKhanApiOrigin";
+import { resolveKhanApiOrigin, resolveKhanLoginUrl } from "../utils/resolveKhanApiOrigin";
 import type { AnalysisResult } from "../utils/types";
 
 async function analyzeTextsWithBackend(texts: string[]): Promise<AnalysisResult[]> {
@@ -17,7 +21,8 @@ async function analyzeTextsWithBackend(texts: string[]): Promise<AnalysisResult[
     throw new Error(validated.error);
   }
 
-  const response = await consumePluginAnalyzeStream(origin, validated.userMessages);
+  const loginUrl = await resolveKhanLoginUrl(origin);
+  const response = await consumePluginAnalyzeStream(origin, validated.userMessages, undefined, loginUrl);
   return mapPluginAnalysisResponseToPanelResults(response);
 }
 
@@ -27,11 +32,15 @@ chrome.runtime.onMessage.addListener((message: { type: string; payload?: unknown
   const texts = (message.payload as string[] | undefined) ?? [];
   analyzeTextsWithBackend(texts)
     .then((results) => sendResponse({ results }))
-    .catch((error: unknown) =>
-      sendResponse({
-        error: error instanceof Error ? error.message : backgroundStrings.analyzeUnknownError
-      })
-    );
+    .catch((error: unknown) => {
+      let messageText =
+        error instanceof Error ? error.message : backgroundStrings.analyzeUnknownError;
+      if (error instanceof PluginSessionRequiredError) {
+        void chrome.tabs.create({ url: error.loginUrl });
+        messageText = `${messageText} 已打开登录页。`;
+      }
+      sendResponse({ error: messageText });
+    });
 
   return true;
 });

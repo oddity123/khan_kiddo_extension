@@ -40,6 +40,17 @@ export interface ConversationAnalysisResponse {
 
 const PLUGIN_ANALYZE_PATH = "/conversation/api/plugin/analyze/stream";
 
+/** 判定为需要登录/补全会话时抛出，由 background 打开 {@link loginUrl} */
+export class PluginSessionRequiredError extends Error {
+  readonly loginUrl: string;
+
+  constructor(message: string, loginUrl: string) {
+    super(message);
+    this.name = "PluginSessionRequiredError";
+    this.loginUrl = loginUrl;
+  }
+}
+
 export function buildPluginAnalyzeStreamUrl(origin: string): string {
   const base = origin.replace(/\/+$/, "");
   return `${base}${PLUGIN_ANALYZE_PATH}`;
@@ -82,6 +93,22 @@ export function validateUserMessagesForPlugin(raw: string[]): ValidatedUserMessa
   return { ok: true, userMessages };
 }
 
+function normalizeSseText(chunk: string): string {
+  return chunk.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+/** 判断是否为典型 HTML 页面片段（登录页、整页错误等），避免把标签/脚本原文展示给用户 */
+function looksLikeHtmlPayload(text: string): boolean {
+  const t = text.replace(/\s+/g, " ").trim().slice(0, 16000);
+  if (!t) return false;
+  if (/<!doctype\s+html\b|<html[\s>]/i.test(t)) return true;
+  if (/<\/html>\s*$/i.test(t) && /<(head|body|script|meta|link|div)\b/i.test(t)) return true;
+  if (/<script[^>]*src=[^>]*bootstrap|<\/body>\s*<\/html>/i.test(t)) return true;
+  if (/<!--\s*Bootstrap JS\s*-->/i.test(t)) return true;
+  if (/\bcharset=["']?utf-8["']?\s*\/?>\s*<title>/i.test(t)) return true;
+  return false;
+}
+
 function extractSseDataPayload(block: string): string | null {
   const lines = block.split("\n");
   let dataLine = "";
@@ -95,11 +122,81 @@ function extractSseDataPayload(block: string): string | null {
   return dataLine || null;
 }
 
+function parseProgressFromDataJson(dataLine: string): ConversationAnalysisProgress | null {
+  try {
+    return JSON.parse(dataLine) as ConversationAnalysisProgress;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 处理缓冲区中所有「以空行分隔」的完整 SSE 帧，返回未凑齐最后一帧的尾部。
+ */
+function drainCompleteSseFrames(
+  buffer: string,
+  onProgress?: (progress: ConversationAnalysisProgress) => void
+): { rest: string; completed?: ConversationAnalysisResponse; error?: string } {
+  const normalized = normalizeSseText(buffer);
+  const parts = normalized.split("\n\n");
+  const rest = parts.pop() ?? "";
+
+  for (const block of parts) {
+    const dataLine = extractSseDataPayload(block);
+    if (!dataLine) continue;
+
+    const progress = parseProgressFromDataJson(dataLine);
+    if (!progress) continue;
+
+    onProgress?.(progress);
+
+    if (progress.status === "COMPLETED") {
+      if (progress.result) return { rest, completed: progress.result };
+      return { rest, error: "KhanKiddo：分析已完成但未返回 result。" };
+    }
+
+    if (progress.status === "ERROR") {
+      return { rest, error: progress.errorMessage || "分析失败" };
+    }
+  }
+
+  return { rest };
+}
+
+function tryParseTrailingSseBlock(
+  tail: string,
+  onProgress?: (progress: ConversationAnalysisProgress) => void
+): { completed?: ConversationAnalysisResponse; error?: string } {
+  const trimmed = normalizeSseText(tail).trim();
+  if (!trimmed) return {};
+
+  const dataLine = extractSseDataPayload(trimmed);
+  if (!dataLine) return {};
+
+  const progress = parseProgressFromDataJson(dataLine);
+  if (!progress) return {};
+
+  onProgress?.(progress);
+
+  if (progress.status === "COMPLETED") {
+    if (progress.result) return { completed: progress.result };
+    return { error: "KhanKiddo：分析已完成但未返回 result。" };
+  }
+  if (progress.status === "ERROR") {
+    return { error: progress.errorMessage || "分析失败" };
+  }
+  return {};
+}
+
 export async function consumePluginAnalyzeStream(
   origin: string,
   userMessages: string[],
-  onProgress?: (progress: ConversationAnalysisProgress) => void
+  onProgress?: (progress: ConversationAnalysisProgress) => void,
+  /** 未登录时用于 `chrome.tabs.create` 的登录页完整 URL */
+  loginPageUrl?: string
 ): Promise<ConversationAnalysisResponse> {
+  const loginTarget = loginPageUrl?.trim() || `${origin.replace(/\/+$/, "")}/login`;
+
   const url = buildPluginAnalyzeStreamUrl(origin);
   const res = await fetch(url, {
     method: "POST",
@@ -113,6 +210,12 @@ export async function consumePluginAnalyzeStream(
 
   if (!res.ok) {
     const bodyPreview = await res.text().catch(() => "");
+    if (looksLikeHtmlPayload(bodyPreview)) {
+      throw new PluginSessionRequiredError(`请先登录（HTTP ${res.status}）。`, loginTarget);
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new PluginSessionRequiredError(`请先登录（HTTP ${res.status}）。`, loginTarget);
+    }
     const tail = bodyPreview.replace(/\s+/g, " ").trim().slice(0, 280);
     throw new Error(
       tail ? `KhanKiddo：请求失败（HTTP ${res.status}）：${tail}` : `KhanKiddo：请求失败（HTTP ${res.status}）。`
@@ -129,35 +232,44 @@ export async function consumePluginAnalyzeStream(
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
 
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() ?? "";
-
-    for (const block of parts) {
-      const dataLine = extractSseDataPayload(block);
-      if (!dataLine) continue;
-
-      let progress: ConversationAnalysisProgress;
-      try {
-        progress = JSON.parse(dataLine) as ConversationAnalysisProgress;
-      } catch {
-        continue;
-      }
-
-      onProgress?.(progress);
-
-      if (progress.status === "COMPLETED") {
-        if (progress.result) return progress.result;
-        throw new Error("KhanKiddo：分析已完成但未返回 result。");
-      }
-
-      if (progress.status === "ERROR") {
-        throw new Error(progress.errorMessage || "分析失败");
-      }
+    if (value && value.byteLength > 0) {
+      buffer += decoder.decode(value, { stream: !done });
     }
+
+    if (done) {
+      buffer += decoder.decode();
+      const drainedOnClose = drainCompleteSseFrames(buffer, onProgress);
+      buffer = drainedOnClose.rest;
+      if (drainedOnClose.error) throw new Error(drainedOnClose.error);
+      if (drainedOnClose.completed) return drainedOnClose.completed;
+      break;
+    }
+
+    const drained = drainCompleteSseFrames(buffer, onProgress);
+    buffer = drained.rest;
+    if (drained.error) throw new Error(drained.error);
+    if (drained.completed) return drained.completed;
   }
 
-  throw new Error("KhanKiddo：流已结束，但未收到完成状态。");
+  const finalDrained = drainCompleteSseFrames(buffer, onProgress);
+  buffer = finalDrained.rest;
+  if (finalDrained.error) throw new Error(finalDrained.error);
+  if (finalDrained.completed) return finalDrained.completed;
+
+  const trailing = tryParseTrailingSseBlock(buffer, onProgress);
+  if (trailing.error) throw new Error(trailing.error);
+  if (trailing.completed) return trailing.completed;
+
+  const rawBuffer = normalizeSseText(buffer).trim();
+  if (looksLikeHtmlPayload(rawBuffer)) {
+    throw new PluginSessionRequiredError("请先登录。", loginTarget);
+  }
+
+  const tailPreview = rawBuffer.replace(/\s+/g, " ").slice(0, 200);
+  throw new Error(
+    tailPreview
+      ? `分析未完成：未收到有效结果。若已登录仍出现，请检查网络或联系管理员。（技术摘要：${tailPreview}）`
+      : "分析未完成：响应为空或格式异常。若已登录仍出现，请稍后重试。"
+  );
 }

@@ -5,6 +5,8 @@ interface SelectedItemsPanelProps {
   items: SelectedTextItem[];
   onRemove: (id: string) => void;
   onClearAll: () => void;
+  /** 有分析结果时收窄列表高度，把纵向空间让给结果区 */
+  compact?: boolean;
 }
 
 function TrashIcon({ className }: { className?: string }) {
@@ -28,12 +30,17 @@ function TrashIcon({ className }: { className?: string }) {
   );
 }
 
-export function SelectedItemsPanel({ items, onRemove, onClearAll }: SelectedItemsPanelProps) {
+export function SelectedItemsPanel({ items, onRemove, onClearAll, compact }: SelectedItemsPanelProps) {
+  const listMaxClass = compact
+    ? "max-h-[min(20vh,168px)]"
+    : items.length > 0
+      ? "max-h-[min(32vh,280px)]"
+      : "";
   const listScrollClass =
-    items.length > 0 ? "max-h-[min(52vh,380px)] overflow-y-auto overflow-x-hidden pr-0.5" : "";
+    items.length > 0 ? `${listMaxClass} overflow-y-auto overflow-x-hidden pr-0.5` : "";
 
   return (
-    <section className="shrink-0 rounded-2xl bg-white p-4 shadow-soft">
+    <section className="shrink-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-soft">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-800">{selectedPanel.sectionTitle}</h2>
         <div className="flex shrink-0 items-center gap-2">
@@ -62,9 +69,15 @@ export function SelectedItemsPanel({ items, onRemove, onClearAll }: SelectedItem
             {items.map((item) => (
               <li
                 key={item.id}
-                className="flex h-[4.25rem] flex-shrink-0 gap-1.5 rounded-lg border border-slate-100 bg-white py-1.5 pl-2 pr-1 transition hover:border-blue-200 hover:bg-blue-50/40"
+                className={`flex flex-shrink-0 gap-1.5 rounded-xl border border-slate-100 bg-slate-50/80 py-1.5 pl-2 pr-1 transition hover:border-blue-200 hover:bg-blue-50/50 ${
+                  compact ? "min-h-0 max-h-[3.25rem]" : "min-h-[3.5rem] max-h-[4.25rem]"
+                }`}
               >
-                <p className="min-w-0 flex-1 self-center overflow-hidden break-words text-xs leading-snug text-slate-700 line-clamp-2">
+                <p
+                  className={`min-w-0 flex-1 self-center overflow-hidden break-words text-xs leading-snug text-slate-700 ${
+                    compact ? "line-clamp-1" : "line-clamp-2"
+                  }`}
+                >
                   {item.text}
                 </p>
                 <button

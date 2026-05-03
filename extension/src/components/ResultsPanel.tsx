@@ -12,7 +12,7 @@ function analysisTypeLabel(type: AnalysisResult["type"]): string {
 
 export function ResultsPanel({ results, loading }: ResultsPanelProps) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-soft">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 shadow-soft">
       <h2 className="mb-3 shrink-0 text-sm font-semibold text-slate-800">{resultsPanel.sectionTitle}</h2>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-0.5">

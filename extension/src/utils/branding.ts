@@ -12,13 +12,14 @@ export const EXTENSION_DESCRIPTION =
 export const SIDE_PANEL_DOCUMENT_TITLE = BRAND_NAME;
 
 export const sidePanel = {
-  headerEyebrow: BRAND_NAME,
-  headerTitle: "对话勾选与批量分析",
-  headerDescription:
-    "由 KhanKiddo 在侧栏汇总已选用户消息并发起分析。请先在页面勾选消息旁的复选框；列表过长时在区域内滚动。",
+  /** 头部主标题（含品牌） */
+  headerTitle: `${BRAND_NAME} · 对话分析`,
+  /** 头部一行说明（原红框内长文案的精简版） */
+  headerTagline: "在豆包对话里勾选你的用户消息，在此汇总后一键分析。",
   analyzeButton: "用 KhanKiddo 分析",
   analyzing: "KhanKiddo 分析中…",
-  analyzeFailedOriginal: "KhanKiddo 分析失败",
+  /** 失败时在结果卡片「原文」位展示的短标题，具体原因见「建议」下的错误文案 */
+  analyzeFailedOriginal: "分析未成功",
   analyzeFailedFallback: "KhanKiddo 后台出现未知错误，请稍后重试。"
 } as const;
 
@@ -31,7 +32,7 @@ export const selectedPanel = {
 } as const;
 
 export const resultsPanel = {
-  sectionTitle: "KhanKiddo 分析结果",
+  sectionTitle: "分析结果",
   emptyHint: "分析结果将显示在此处。"
 } as const;
 
