@@ -1,4 +1,4 @@
-import { backgroundStrings } from "../utils/branding";
+import { backgroundStrings, sidePanel } from "../utils/branding";
 import {
   consumePluginAnalyzeStream,
   PluginSessionRequiredError,
@@ -25,6 +25,38 @@ async function analyzeTextsWithBackend(texts: string[]): Promise<AnalysisResult[
   const response = await consumePluginAnalyzeStream(origin, validated.userMessages, undefined, loginUrl);
   return mapPluginAnalysisResponseToPanelResults(response);
 }
+
+const CONTEXT_MENU_GO_HOME = "khan_kiddo_go_home";
+
+function registerExtensionContextMenus(): void {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_GO_HOME,
+      title: sidePanel.goHomeLink,
+      contexts: ["action"]
+    });
+  });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  registerExtensionContextMenus();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  registerExtensionContextMenus();
+});
+
+registerExtensionContextMenus();
+
+chrome.contextMenus.onClicked.addListener((info) => {
+  if (info.menuItemId !== CONTEXT_MENU_GO_HOME) return;
+  void (async () => {
+    const origin = await resolveKhanApiOrigin();
+    if (!origin) return;
+    const home = origin.endsWith("/") ? origin : `${origin}/`;
+    await chrome.tabs.create({ url: home });
+  })();
+});
 
 chrome.runtime.onMessage.addListener((message: { type: string; payload?: unknown }, _, sendResponse) => {
   if (message.type !== "ANALYZE_TEXTS") return false;

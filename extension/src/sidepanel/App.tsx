@@ -1,9 +1,10 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { SelectedItemsPanel } from "../components/SelectedItemsPanel";
 import { useAnalyzerStore } from "../store/useAnalyzerStore";
 import { getActiveTabId, sendMessageToTab } from "../utils/chrome";
 import { sidePanel } from "../utils/branding";
+import { resolveKhanApiOrigin } from "../utils/resolveKhanApiOrigin";
 import type { AnalysisResult, SelectedTextItem } from "../utils/types";
 
 interface SelectionResponse {
@@ -15,7 +16,29 @@ interface AnalyzeResponse {
   error?: string;
 }
 
+function HomeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M3 11.5 12 4l9 7.5" />
+      <path d="M5 10.5V20h14v-9.5" />
+      <path d="M10 20v-5h4v5" />
+    </svg>
+  );
+}
+
 export default function App() {
+  const [apiOrigin, setApiOrigin] = useState<string | null>(null);
+
   const {
     selectedItems,
     results,
@@ -27,6 +50,29 @@ export default function App() {
     setLoading,
     clearResults
   } = useAnalyzerStore();
+
+  const refreshApiOrigin = useCallback(() => {
+    void resolveKhanApiOrigin().then(setApiOrigin);
+  }, []);
+
+  useEffect(() => {
+    refreshApiOrigin();
+    const onStorage = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) => {
+      if (areaName !== "local" || !("khanApiOrigin" in changes)) return;
+      refreshApiOrigin();
+    };
+    chrome.storage.onChanged.addListener(onStorage);
+    return () => chrome.storage.onChanged.removeListener(onStorage);
+  }, [refreshApiOrigin]);
+
+  const handleOpenHome = useCallback(() => {
+    if (!apiOrigin) return;
+    const url = apiOrigin.endsWith("/") ? apiOrigin : `${apiOrigin}/`;
+    void chrome.tabs.create({ url });
+  }, [apiOrigin]);
 
   const loadSelections = useCallback(async () => {
     const tabId = await getActiveTabId();
@@ -97,8 +143,24 @@ export default function App() {
   return (
     <main className="flex h-screen max-h-screen flex-col overflow-hidden bg-gradient-to-b from-panel-50 to-white p-4 text-slate-900">
       <header className="shrink-0 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-soft">
-        <h1 className="text-base font-semibold leading-snug text-slate-800">{sidePanel.headerTitle}</h1>
-        <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{sidePanel.headerTagline}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-base font-semibold leading-snug text-slate-800">{sidePanel.headerTitle}</h1>
+            <button
+              type="button"
+              onClick={handleOpenHome}
+              disabled={!apiOrigin}
+              aria-label={sidePanel.goHomeLink}
+              className="group inline-flex shrink-0 items-center rounded-lg border border-transparent px-1.5 py-1.5 text-blue-600 transition-all duration-150 ease-out hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 hover:shadow-sm active:scale-95 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-slate-300 disabled:opacity-45 disabled:shadow-none"
+            >
+              <HomeIcon className="h-4 w-4" />
+              <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs font-medium opacity-0 transition-all duration-150 group-hover:ml-1 group-hover:max-w-20 group-hover:opacity-100">
+                {sidePanel.goHomeLink}
+              </span>
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{sidePanel.headerTagline}</p>
+        </div>
       </header>
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">

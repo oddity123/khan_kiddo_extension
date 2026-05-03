@@ -16,6 +16,9 @@ export const sidePanel = {
   headerTitle: `${BRAND_NAME} · 对话分析`,
   /** 头部一行说明（原红框内长文案的精简版） */
   headerTagline: "在豆包对话里勾选你的用户消息，在此汇总后一键分析。",
+  /** 侧栏头部与工具栏右键菜单共用，强调该项可点击跳转 */
+  goHomeLink: "前往主页",
+  goHomeDisabledHint: "未配置应用根地址（VITE_KHAN_API_ORIGIN 或 khanApiOrigin）",
   analyzeButton: "用 KhanKiddo 分析",
   analyzing: "KhanKiddo 分析中…",
   /** 失败时在结果卡片「原文」位展示的短标题，具体原因见「建议」下的错误文案 */
